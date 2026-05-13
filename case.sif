@@ -1,0 +1,184 @@
+Header
+  CHECK KEYWORDS Warn
+  Mesh DB "." "mesh2"
+  Include Path ""
+  Results Directory "res"
+End
+
+Simulation
+  Max Output Level = 5
+  Coordinate System = Cartesian
+  Coordinate Mapping(3) = 1 2 3
+  Simulation Type = Scanning
+  Steady State Max Iterations = 1
+  Output Intervals(1) = 1
+  Timestep intervals(1) = 41
+  Timestep Sizes(1) = .025
+  Timestepping Method = BDF
+  BDF Order = 1
+  Solver Input File = case.sif
+  Post File = case.vtu
+End
+
+Constants
+  Gravity(4) = 0 -1 0 9.82
+  Stefan Boltzmann = 5.670374419e-08
+  Permittivity of Vacuum = 8.85418781e-12
+  Permeability of Vacuum = 1.25663706e-6
+  Boltzmann Constant = 1.380649e-23
+  Unit Charge = 1.6021766e-19
+End
+
+Body 1
+  Target Bodies(1) = 1
+  Name = "Body 1"
+  Equation = 1
+Material = 1
+End
+
+Solver 1
+  Equation = Linear elasticity
+  Procedure = "ElasticSolve" "ElasticSolver"
+  Calculate Stresses = True
+Calculate Strains = True
+  Exec Solver = Always
+  Stabilize = True
+  Optimize Bandwidth = True
+  Steady State Convergence Tolerance = 1.0e-8
+  Nonlinear System Convergence Tolerance = 1.0e-7
+  Nonlinear System Max Iterations = 20
+  Nonlinear System Newton After Iterations = 3
+  Nonlinear System Newton After Tolerance = 1.0e-3
+  Nonlinear System Relaxation Factor = 1
+  Linear System Solver = Direct
+  Linear System Direct Method = Mumps
+  Linear System Max Iterations = 500
+  Linear System Convergence Tolerance = 1.0e-10
+  BiCGstabl polynomial degree = 2
+  Linear System Preconditioning = ILU0
+  Linear System ILUT Tolerance = 1.0e-3
+  Linear System Abort Not Converged = False
+  Linear System Residual Output = 10
+  Linear System Precondition Recompute = 1
+output state variables = true
+End
+
+Solver 2
+  Exec Solver = After Timestep
+  Procedure = "SaveData" "SaveScalars"
+  Filename = f.dat
+  Variable 1 = Time
+operator 1 = max
+  Variable 2 = Stress 
+operator 2 = max
+  Variable 3 = Strain
+operator 3 = max
+End 
+
+Solver 3
+Exec Solver = After All
+   Procedure = "PDESolver" "PDESolver"
+   Equation = post process data
+End
+
+Equation 1
+  Name = "Equation 1"
+  Active Solvers(3) = 1 2 3
+End
+
+!Material 1
+! Number of Material Constants = Integer 4
+! Number of State Variables = Integer 7
+! ! List material constants as {}: The 1 constant is reference temperature
+! Material Constants(4) = Real 200000.0 0.30 0.1 220.0
+! UMAT Subroutine = File "/home/titan/tfel/src/libABAQUSBEHAVIOUR.so" "ISOTROPICLINEARHARDENINGPLASTICITY_3D"
+! Name = "ISOTROPICLINEARHARDENINGPLASTICITY_3D"  ! This specifies the CMNAME argument of UMAT
+!End
+
+Material 1
+  Number of Material Constants = Integer 4
+  Number of State Variables = Integer 0
+  ! List material constants as {Young's modulus, Poisson's ratio,Hardening Slope, Yield}:
+  Material Constants(4) = Real 200000.0 0.30 0.1 220.0
+  UMAT Subroutine = File "PDEUmat" "plastic"
+  Name = "plastic"  ! This specifies the CMNAME argument of UMAT
+End
+
+Boundary Condition 1
+  Target nodes(1) = 1 
+  Name = "BoundaryCondition 1"
+  Displacement 1 = 0
+  Displacement 2 = 0
+  Displacement 3 = 0
+End
+Boundary Condition 2
+  Target nodes(1) = 2
+  Name = "BoundaryCondition 1"
+
+  Displacement 2 = 0
+  Displacement 3 = 0
+End
+Boundary Condition 3
+  Target nodes(1) = 3 
+  Name = "BoundaryCondition 1"
+  Displacement 1 = 0
+  Displacement 3 = 0
+
+End
+Boundary Condition 4
+  Target nodes(1) = 4
+  Name = "BoundaryCondition 1"
+
+  Displacement 3 = 0
+End
+Boundary Condition 5
+  Target nodes(1) = 5
+  Name = "BoundaryCondition 1"
+  Displacement 1 = 0
+
+End
+Boundary Condition 6
+  Target nodes(1) = 6
+  Name = "BoundaryCondition 1"
+
+  Displacement 2 = 0
+
+End
+Boundary Condition 7
+  Target nodes(1) = 7
+  Name = "BoundaryCondition 1"
+  Displacement 1 = 0
+
+End
+Boundary Condition 8
+  Target nodes(1) = 8
+  Name = "BoundaryCondition 1"
+
+End
+Boundary Condition 9
+  Target nodes(1) = 9
+  Name = "BoundaryCondition 1"
+  Displacement 1 = 0
+Displacement 2 = 0
+  Displacement 3 = Variable Time; Real MATC "0.004*tx"
+End
+Boundary Condition 10
+  Target nodes(1) = 10
+  Name = "BoundaryCondition 1"
+  Displacement 3 = Variable Time; Real MATC "0.004*tx"
+Displacement 2 = 0
+End
+Boundary Condition 11
+  Target nodes(1) = 11
+  Name = "BoundaryCondition 1"
+  Displacement 1 = 0
+  Displacement 3 = Variable Time; Real MATC "0.004*tx"
+End
+Boundary Condition 12
+  Target nodes(1) = 12
+  Name = "BoundaryCondition 1"
+  Displacement 3 = Variable Time; Real MATC "0.004*tx"
+End
+
+
+
