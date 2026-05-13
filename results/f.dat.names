@@ -1,0 +1,11 @@
+Metadata for SaveScalars file: res/f.dat
+Elmer version: 26.2
+Elmer revision: 5c5bdc4ca
+Elmer compilation date: 2026-05-12
+Solver input file: case.sif
+File started at: 2026/05/13 12:08:24
+ 
+Variables in columns of matrix: 
+   1: value: time scalar variable
+   2: max: stress
+   3: max: strain
