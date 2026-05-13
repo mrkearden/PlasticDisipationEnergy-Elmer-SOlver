@@ -5,6 +5,6 @@ Uses new solver to calculate plastic work, heat increases, and cummlative T incr
 
 Cuurent output is a csv file openable in a spreadsheet that hsa the results for each
 element, npt, and ntens.  Example problem herein is a solid block with uniaxial  
-stress in the Z direction,  so maos other direction has small result, but Ntens 3 has 
+stress in the Z direction,  so most other direction has small results, but Ntens 3 has 
 verified results.  
 
