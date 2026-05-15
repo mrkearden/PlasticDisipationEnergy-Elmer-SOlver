@@ -1,0 +1,221 @@
+!------------------------------------------------------------------------------
+  SUBROUTINE plastic(STRESS, STATEV, DDSDDE, SSE, SPD, SCD, &
+       rpl, ddsddt, drplde, drpldt, STRAN, DSTRAN, TIME, DTIME, TEMP, dTemp, &
+       predef, dpred, CMNAME, NDI, NSHR, NTENS, NSTATEV, PROPS, NPROPS, &
+       coords, drot, pnewdt, celent, DFRGRD0, DFRGRD1, NOEL, NPT, layer, kspt, &
+       kstep, kinc)
+!------------------------------------------------------------------------------
+    USE Types
+  USE DefUtils
+    IMPLICIT NONE
+
+    REAL(KIND=dp), INTENT(INOUT) :: STRESS(NTENS)
+    ! Requirement for Elmer: At the time of calling the Cauchy stress T_n before
+    ! the time/load increment is given
+    ! Requirement for umat:  The stress T_{n+1}^{(k)} corresponding to the 
+    ! current approximation of the strain increment (DSTRAN) must be returned. 
+    ! If the strain increment is defined to be zero in the beginning of the
+    ! nonlinear iteration, Elmer will generate a candidate for the strain increment
+    ! by assuming purely elastic increment characterized by DDSDDE.
+
+    REAL(KIND=dp), INTENT(INOUT) :: STATEV(NSTATEV)
+    ! Requirement for Elmer: The state variables Q_n as specified at the 
+    ! previous time/load level for converged solution are given.
+    ! Requirement for umat:  The state variables Q_{n+1}^{(k)} corresponding to 
+    ! the current approximation of the strain increment must be returned. If 
+    ! convergence is attained, these values will be saved and associated with the 
+    ! converged solution (cf. the input values)
+
+    REAL(KIND=dp), INTENT(OUT) :: DDSDDE(NTENS,NTENS)
+    ! The derivative of (Cauchy) stress response function with respect to the 
+    ! strain evaluated for the current approximation must be returned
+
+    REAL(KIND=dp), INTENT(INOUT) :: SSE, SPD, SCD
+    ! Requirement for Elmer: Provide specific strain energy (sse), plastic 
+    ! dissipation (spd) and creep dissipation (scd) at the previous time/load 
+    ! level (these are supposed to be declared to be state variables)
+    ! Requirement for umat:  The values of the energy variables corresponding to 
+    ! the current approximation may be returned
+
+    REAL(KIND=dp), INTENT(OUT) :: rpl
+    ! The mechanical heating power (volumetric)
+
+    REAL(KIND=dp), INTENT(OUT) :: ddsddt(NTENS), drplde(NTENS), drpldt
+
+    REAL(KIND=dp), INTENT(IN) :: STRAN(NTENS)
+    ! This gives the strains before the time/load increment.
+    ! The strain can be computed from the deformation gradient, so this
+    ! argument can be considered to be redundant. Elmer provides
+    ! this information anyway. Abaqus assumes that the logarithmic strain 
+    ! is used, but Elmer may also use other strain measures.
+
+    REAL(KIND=dp), INTENT(IN) :: DSTRAN(NTENS)
+    ! The current candidate for the strain increment to obtain the current 
+    ! candidate for the stress. In principle this could be computed from the 
+    ! deformation gradient; cf. the variable stran.
+
+    REAL(KIND=dp), INTENT(IN) :: TIME(2)
+    ! Both entries give time before the time/load increment (the time for the last
+    ! converged solution
+
+    REAL(KIND=dp), INTENT(IN) :: DTIME
+    ! The time increment
+
+    REAL(KIND=dp), INTENT(IN) :: TEMP
+    ! Temperature before the time/load increment
+
+    REAL(KIND=dp), INTENT(IN) :: dtemp
+    ! Temperature increment associated wíth the time/load increment. Currently
+    ! Elmer assumes isothermal conditions during the load increment.
+
+    REAL(KIND=dp), INTENT(IN) :: predef(1), dpred(1)
+    ! These are just dummy variables for Elmer
+
+    CHARACTER(len=80), INTENT(IN) :: CMNAME
+    ! The material model name
+
+    INTEGER, INTENT(IN) :: NDI
+    ! The number of direct stress components
+
+    INTEGER, INTENT(IN) :: NSHR
+    ! The number of the engineering shear strain components
+
+    INTEGER, INTENT(IN) :: NTENS 
+    ! The size of the array containing the stress or strain components
+
+    INTEGER, INTENT(IN) :: NSTATEV
+    ! The number of state variables associated with the material model
+
+    REAL(KIND=dp), INTENT(IN) :: PROPS(NPROPS)
+    ! An array of material constants
+
+    INTEGER, INTENT(IN) :: NPROPS
+    ! The number of the material constants
+
+    REAL(KIND=dp), INTENT(IN) :: coords(3)
+    ! The coordinates of the current point could be specified
+
+    REAL(KIND=dp), INTENT(IN) :: drot(3,3)
+    ! No support for keeping track of rigid body rotations 
+    ! (the variable is initialized to the identity)
+
+    REAL(KIND=dp), INTENT(INOUT) :: pnewdt
+    ! Currently, suggesting a new size of time increment does not make any impact
+
+    REAL(KIND=dp), INTENT(IN) :: celent
+    ! The element size is not yet provided by Elmer
+
+    REAL(KIND=dp), INTENT(IN) :: DFRGRD0(3,3)
+    ! The deformation gradient before the time/load increment (at the previous 
+    ! time/load level for converged solution)
+
+    REAL(KIND=dp), INTENT(IN) :: DFRGRD1(3,3)
+    ! The deformation gradient corresponding to the current approximation
+    ! (cf. the return value of STRESS variable) 
+
+    INTEGER, INTENT(IN) :: NOEL
+    ! The element number
+
+    INTEGER, INTENT(IN) :: NPT
+    ! The integration point number
+
+    INTEGER, INTENT(IN) :: layer, kspt, kstep, kinc
+    ! kstep and kinc could be provided to give information on the incrementation
+    ! procedure
+!------------------------------------------------------------------------------
+    ! Local variables:
+  TYPE(Solver_t) :: Solver
+  TYPE(Model_t) :: Model
+  REAL(KIND=dp) :: dt
+  LOGICAL :: Found
+  LOGICAL :: Transient
+ TYPE(Mesh_t), POINTER :: Mesh
+  REAL(KIND=dp):: density, Cp,ctime, stime
+  TYPE(Variable_t),POINTER :: VarLoadWkg, VarLoadWm3
+  INTEGER :: Visit = 0, nF, i, n, dim, NSIZE,totnpt,totsteps, stat
+ REAL(KIND=dp) :: nu, E,E2, LambdaLame, MuLame,hslope,yield
+!real(kind=dp), allocatable :: elstrain(:,:), plstrain(:,:)
+  CHARACTER(LEN=1) :: c=','
+  TYPE(ValueList_t), POINTER :: Material, SolverParams
+  TYPE(Element_t), POINTER :: Element
+!------------------------------------------------------------------------------
+SAVE Visit, Mesh, stat,stime
+
+    ! Get Young's modulus and the Poisson ratio:
+
+
+IF (VISIT .EQ. 0) THEN
+  Mesh => Solver % Mesh
+  dim = CoordinateSystemDimension()
+  SolverParams => GetSolverParams()
+     open(unit=91,file='PDEOutput.csv',status='unknown')
+     write(91,*) 'time',c,'noel',c,'npt',c,'ntens',c,'stress',c,'strain'
+!,c,'elstrain',c,'plstrain'
+close(91)
+visit = 1
+stat = 0
+stime = 0
+    nu = Props(2)
+    hslope = Props(3)
+    yield = Props(4)
+    density = Props(5)
+    Cp = Props(6)
+    Totnpt = Props(7)
+    Totsteps = Props(8)
+!allocate(elstrain(totsteps,6))
+!allocate(plstrain(totsteps,6))
+end if
+ctime = time(1) - stime
+stime = time(1)
+write(*,*) time(1),ctime, stime
+if (ctime .gt. 0.0) then
+ stat = 1
+end if
+!do i=1,ntens
+!write(*,*) 'Time ','ctime ', ' stime','  noel ','  npt  ','  ntens ', '   stat'
+!write(*,fmt='(3(F7.5,1x),4(I1,1x))')&
+!time(1),ctime,stime,noel,npt,i,stat
+!    E = Props(1)
+!end do
+E2 = E
+! Check stress for yield
+do i=1,ntens
+! write(*,*) j," Stress:",stress(j)," yield:",yield
+ if (abs(stress(i)) .gt. yield) then
+  E = hslope
+!write(*,*) "Youngs =",E
+ end if
+end do
+
+    LambdaLame = E * nu / ( (1.0d0+nu) * (1.0d0-2.0d0*nu) )
+    MuLame = E / (2.0d0 * (1.0d0 + nu))
+
+    ddsdde = 0.0d0
+    ddsdde(1:ndi,1:ndi) = LambdaLame
+    DO i=1,ntens
+      ddsdde(i,i) = ddsdde(i,i) + MuLame
+    END DO
+    DO i=1,ndi
+      ddsdde(i,i) = ddsdde(i,i) + MuLame
+    END DO
+    !
+
+    stress = stress + MATMUL(ddsdde,dstran)
+
+!elstrain = stress/E2
+!plstrain = stran-elstrain
+!do i =1,ntens
+!if (plstrain(i).lt.0.0) plstrain(i)=0.0
+!end do
+if (stat.eq.0) then
+do i=1,ntens
+open(unit=91,file='PDEOutput.csv',status='unknown',position='append')
+write(91,*) time(1),c,noel,c,npt,c,i,c,stress(i),c,stran(i),c
+! elstrain(i),c,plstrain(i)
+close(91)
+end do
+endif
+
+!------------------------------------------------------------------------------
+  END SUBROUTINE plastic
+!------------------------------------------------------------------------------
