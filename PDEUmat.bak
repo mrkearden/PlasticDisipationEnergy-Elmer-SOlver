@@ -126,66 +126,96 @@
     ! Local variables:
   TYPE(Solver_t) :: Solver
   TYPE(Model_t) :: Model
-  REAL(KIND=dp) :: dt
+  REAL(KIND=dp) :: dt,beta
   LOGICAL :: Found
   LOGICAL :: Transient
  TYPE(Mesh_t), POINTER :: Mesh
   REAL(KIND=dp):: density, Cp,ctime, stime
   TYPE(Variable_t),POINTER :: VarLoadWkg, VarLoadWm3
-  INTEGER :: Visit = 0, nF, i, n, dim, NSIZE,totnpt,totsteps, stat
+  INTEGER :: Visit = 0, nF, i, n, dim, NSIZE,totnpt,totsteps, stat, j, k
  REAL(KIND=dp) :: nu, E,E2, LambdaLame, MuLame,hslope,yield
-!real(kind=dp), allocatable :: elstrain(:,:), plstrain(:,:)
-  CHARACTER(LEN=1) :: c=','
+real(kind=dp), allocatable, save :: kstress(:,:)
+real(kind=dp), allocatable, save :: elstrain(:,:)
+ real(kind=dp),allocatable,save :: plstrain(:,:)
+ real(kind=dp),allocatable,save :: dlstrain(:,:)
+ real(kind=dp),allocatable,save ::  pwi(:,:)
+real(kind=dp),allocatable, save:: cumwork(:,:)
+ real(kind=dp),allocatable,save :: heatinc(:,:)
+ real(kind=dp),allocatable,save ::  htot(:)
+ real(kind=dp),allocatable,save ::  cumheat(:)
+ real (kind=dp)::pstress(ntens),pstran(ntens)
+ real(kind=dp),allocatable,save :: Trise(:)
+ real(kind=dp),allocatable,save :: cumT(:)
+ INTEGER::kstp=0
+  CHARACTER(LEN=1) :: c=',',header
   TYPE(ValueList_t), POINTER :: Material, SolverParams
   TYPE(Element_t), POINTER :: Element
 !------------------------------------------------------------------------------
-SAVE Visit, Mesh, stat,stime
+SAVE Visit, stat,stime
 
     ! Get Young's modulus and the Poisson ratio:
 
-
+!+++++++++++++++++++++++++++++++++++++
 IF (VISIT .EQ. 0) THEN
-  Mesh => Solver % Mesh
-  dim = CoordinateSystemDimension()
-  SolverParams => GetSolverParams()
+
+ ! Mesh => Solver % Mesh
+ ! dim = CoordinateSystemDimension()
+!  SolverParams => GetSolverParams()
      open(unit=91,file='PDEOutput.csv',status='unknown')
-     write(91,*) 'time',c,'noel',c,'npt',c,'ntens',c,'stress',c,'strain'
-!,c,'elstrain',c,'plstrain'
+     write(91,*) 'time',c,'noel',c,'npt',c,'ntens',c,'stress',c,'strain'&
+,c,'elstrain',c,'plstrain',c,'dlstrain',c,'pwi','c,cumwork',c,'heatinc'&
+,c,'cumheat',c,'Trise',c,'cumT'
 close(91)
 visit = 1
 stat = 0
 stime = 0
+    allocate(kstress(10000,ntens))
+    allocate(plstrain(10000,ntens))
+    allocate(elstrain(10000,ntens))
+    allocate(dlstrain(10000,ntens))
+    allocate(pwi(10000,ntens))
+    allocate(cumwork(10000,ntens))
+    allocate(heatinc(10000,ntens))
+    allocate(htot(10000))
+    allocate(cumheat(10000))
+    allocate(Trise(10000))
+    allocate(cumT(10000))
+
+end if
+!++++++++++++++++++++++++++++++++++++
+!allocate(elstrain(totsteps,6))
+!allocate(plstrain(totsteps,6))
+    E = Props(1)
     nu = Props(2)
     hslope = Props(3)
     yield = Props(4)
     density = Props(5)
     Cp = Props(6)
-    Totnpt = Props(7)
-    Totsteps = Props(8)
-!allocate(elstrain(totsteps,6))
-!allocate(plstrain(totsteps,6))
-end if
-ctime = time(1) - stime
+    beta = Props(7)
+    Totnpt = Props(8)
+    Totsteps = Props(9)
+
+ctime =time(1) - stime
 stime = time(1)
-write(*,*) time(1),ctime, stime
+
+
 if (ctime .gt. 0.0) then
- stat = 1
+stat = 1
+kstp = kstp + 1
 end if
-!do i=1,ntens
-!write(*,*) 'Time ','ctime ', ' stime','  noel ','  npt  ','  ntens ', '   stat'
-!write(*,fmt='(3(F7.5,1x),4(I1,1x))')&
-!time(1),ctime,stime,noel,npt,i,stat
-!    E = Props(1)
-!end do
+
 E2 = E
+
 ! Check stress for yield
+
 do i=1,ntens
-! write(*,*) j," Stress:",stress(j)," yield:",yield
- if (abs(stress(i)) .gt. yield) then
-  E = hslope
-!write(*,*) "Youngs =",E
- end if
+
+     if (abs(stress(i)) .gt. yield) then
+       E = hslope
+
+    end if
 end do
+
 
     LambdaLame = E * nu / ( (1.0d0+nu) * (1.0d0-2.0d0*nu) )
     MuLame = E / (2.0d0 * (1.0d0 + nu))
@@ -199,21 +229,45 @@ end do
       ddsdde(i,i) = ddsdde(i,i) + MuLame
     END DO
     !
-
+    pstress = stress
+    pstran = stran
     stress = stress + MATMUL(ddsdde,dstran)
+   kstress(kstep,:) = stress
+if (stat.eq.1) then
 
-!elstrain = stress/E2
-!plstrain = stran-elstrain
-!do i =1,ntens
-!if (plstrain(i).lt.0.0) plstrain(i)=0.0
-!end do
-if (stat.eq.0) then
-do i=1,ntens
-open(unit=91,file='PDEOutput.csv',status='unknown',position='append')
-write(91,*) time(1),c,noel,c,npt,c,i,c,stress(i),c,stran(i),c
-! elstrain(i),c,plstrain(i)
-close(91)
-end do
+   htot(kstp) = 0.0
+   do i =1,ntens 
+   elstrain(kstp,i) = pstress(i)/E2
+   plstrain(kstp,i) = pstran(i)-elstrain(kstp,i)
+    if (plstrain(kstp,i).lt.0.0) plstrain(kstp,i)=0.0
+    dlstrain(kstp,i) = plstrain(kstp,i)-plstrain(kstp-1,i)
+    if (dlstrain(kstp,i).lt.0.0) dlstrain(kstp,i)=0.0
+  pwi(kstp,i) = dlstrain(kstp,i)* (kstress(kstep-1,i) + kstress(kstep,i)) 
+  cumwork(kstp,i) = cumwork(kstp-1,i) + pwi(kstp,i)
+  heatinc(kstp,i) = pwi(kstp,i) * 1000000.0 * beta
+  end do
+
+   do i =1,ntens 
+      htot(kstp) = htot(kstp) + heatinc(kstp,i)
+   end do
+
+    cumheat(kstp) = cumheat(kstp-1) + htot(kstp)
+    Trise(kstp) = htot(kstp)/(density*Cp)
+    cumT(kstp) = cumT(kstp-1) + Trise(kstp)
+
+   do i=1,ntens
+   open(unit=91,file='PDEOutput.csv',status='unknown',position='append')
+    write(91,fmt=100) time(1),c,noel,c,npt,c,i,c,pstress(i),c,pstran(i),c&
+,elstrain(kstp,i),c,plstrain(kstp,i),c,dlstrain(kstp,i),c,pwi(kstp,i),c,cumwork(kstp,i),c&
+,htot(kstp),c,cumheat(kstp),c,Trise(kstp),c,cumT(kstp)
+   close(91)
+   end do
+100 FORMAT (F8.6,A1,3(i8,A1),10(E13.5,A1),E13.5)
+  if ((noel .eq.2).and.(npt.eq.8)) then 
+    stat=0
+    ctime = 0.0
+  end if
+
 endif
 
 !------------------------------------------------------------------------------
