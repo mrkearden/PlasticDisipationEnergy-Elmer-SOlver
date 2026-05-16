@@ -6,7 +6,7 @@
        kstep, kinc)
 !------------------------------------------------------------------------------
     USE Types
-  USE DefUtils
+    USE DefUtils
     IMPLICIT NONE
 
     REAL(KIND=dp), INTENT(INOUT) :: STRESS(NTENS)
@@ -183,8 +183,7 @@ stime = 0
 
 end if
 !++++++++++++++++++++++++++++++++++++
-!allocate(elstrain(totsteps,6))
-!allocate(plstrain(totsteps,6))
+!
     E = Props(1)
     nu = Props(2)
     hslope = Props(3)
@@ -193,20 +192,19 @@ end if
     Cp = Props(6)
     beta = Props(7)
     Totnpt = Props(8)
-    Totsteps = Props(9)
+    Totsteps = Props(9). 
 
+! Check for converged iteration
 ctime =time(1) - stime
 stime = time(1)
-
-
 if (ctime .gt. 0.0) then
 stat = 1
 kstp = kstp + 1
 end if
-
+! store starting E for later use
 E2 = E
 
-! Check stress for yield
+! Check stress for yield at each tensor
 
 do i=1,ntens
 
