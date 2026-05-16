@@ -213,7 +213,7 @@ do i=1,ntens
 
     end if
 end do
-
+! Calculate stresses
 
     LambdaLame = E * nu / ( (1.0d0+nu) * (1.0d0-2.0d0*nu) )
     MuLame = E / (2.0d0 * (1.0d0 + nu))
@@ -226,7 +226,7 @@ end do
     DO i=1,ndi
       ddsdde(i,i) = ddsdde(i,i) + MuLame
     END DO
-    !
+    ! store previous iteration values
     pstress = stress
     pstran = stran
     stress = stress + MATMUL(ddsdde,dstran)
