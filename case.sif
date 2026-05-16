@@ -75,15 +75,15 @@ operator 2 = max
 operator 3 = max
 End 
 
-Solver 3
-Exec Solver = After All
-   Procedure = "PDESolver" "PDESolver"
-   Equation = post process data
-End
+!Solver 3
+!Exec Solver = After All
+!   Procedure = "PDESolver" "PDESolver"
+!   Equation = post process data
+!End
 
 Equation 1
   Name = "Equation 1"
-  Active Solvers(3) = 1 2 3
+  Active Solvers(2) = 1 2  
 End
 
 !Material 1
@@ -96,10 +96,10 @@ End
 !End
 
 Material 1
-  Number of Material Constants = Integer 4
+  Number of Material Constants = Integer 9
   Number of State Variables = Integer 0
-  ! List material constants as {Young's modulus, Poisson's ratio,Hardening Slope, Yield}:
-  Material Constants(4) = Real 200000.0 0.30 0.1 220.0
+  ! List material constants as {Young's modulus, Poisson's ratio,Hardening Slope, Yield, density, Cp,beta, npt, Tsteps}:
+  Material Constants(9) = Real 200000.0 0.30 0.1 220.0 7850 470 0.90 8 41
   UMAT Subroutine = File "PDEUmat" "plastic"
   Name = "plastic"  ! This specifies the CMNAME argument of UMAT
 End
