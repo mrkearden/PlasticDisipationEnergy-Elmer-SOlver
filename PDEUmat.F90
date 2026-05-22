@@ -1,3 +1,4 @@
+! UMAT subroutine to calculate Plastic Damage Enegry and Temperature Rise
 !------------------------------------------------------------------------------
   SUBROUTINE plastic(STRESS, STATEV, DDSDDE, SSE, SPD, SCD, &
        rpl, ddsddt, drplde, drpldt, STRAN, DSTRAN, TIME, DTIME, TEMP, dTemp, &
@@ -183,7 +184,7 @@ stime = 0
 
 end if
 !++++++++++++++++++++++++++++++++++++
-!
+! Cp is specific heat
     E = Props(1)
     nu = Props(2)
     hslope = Props(3)
@@ -195,6 +196,7 @@ end if
     Totsteps = Props(9). 
 
 ! Check for converged iteration
+
 ctime =time(1) - stime
 stime = time(1)
 if (ctime .gt. 0.0) then
@@ -213,6 +215,7 @@ do i=1,ntens
 
     end if
 end do
+
 ! Calculate stresses
 
     LambdaLame = E * nu / ( (1.0d0+nu) * (1.0d0-2.0d0*nu) )
@@ -231,6 +234,9 @@ end do
     pstran = stran
     stress = stress + MATMUL(ddsdde,dstran)
    kstress(kstep,:) = stress
+
+! IF a converged step calculate PDE and heat save results
+
 if (stat.eq.1) then
 
    htot(kstp) = 0.0
@@ -245,6 +251,7 @@ if (stat.eq.1) then
   heatinc(kstp,i) = pwi(kstp,i) * 1000000.0 * beta
   end do
 
+!  Assume total heat increase at on node is the sum of all six tensors
    do i =1,ntens 
       htot(kstp) = htot(kstp) + heatinc(kstp,i)
    end do
@@ -252,6 +259,8 @@ if (stat.eq.1) then
     cumheat(kstp) = cumheat(kstp-1) + htot(kstp)
     Trise(kstp) = htot(kstp)/(density*Cp)
     cumT(kstp) = cumT(kstp-1) + Trise(kstp)
+
+! Add tensor output to csv file
 
    do i=1,ntens
    open(unit=91,file='PDEOutput.csv',status='unknown',position='append')
