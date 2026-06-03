@@ -1,7 +1,6 @@
 # PlasticDisipationEnergy-Elmer-SOlver  
-PDESOlver.F90 not used anymore, all calculations are in UMAT  
 
-Soler for Elmer for plastic energy disipation and heat increase  
+Solver for plastic energy disipation and heat increase  
 Uses UMAT for perfectly plastic material model
 Uses new solver to calculate plastic work, heat increases, and cummlative T increase  
 
