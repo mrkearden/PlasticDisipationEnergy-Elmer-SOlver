@@ -1,4 +1,3 @@
-! UMAT subroutine to calculate Plastic Damage Enegry and Temperature Rise
 !------------------------------------------------------------------------------
   SUBROUTINE plastic(STRESS, STATEV, DDSDDE, SSE, SPD, SCD, &
        rpl, ddsddt, drplde, drpldt, STRAN, DSTRAN, TIME, DTIME, TEMP, dTemp, &
@@ -7,7 +6,7 @@
        kstep, kinc)
 !------------------------------------------------------------------------------
     USE Types
-    USE DefUtils
+  USE DefUtils
     IMPLICIT NONE
 
     REAL(KIND=dp), INTENT(INOUT) :: STRESS(NTENS)
@@ -133,7 +132,7 @@
  TYPE(Mesh_t), POINTER :: Mesh
   REAL(KIND=dp):: density, Cp,ctime, stime
   TYPE(Variable_t),POINTER :: VarLoadWkg, VarLoadWm3
-  INTEGER :: Visit = 0, nF, i, n, dim, NSIZE,totnpt,totsteps, stat, j, k
+  INTEGER :: Visit = 0, nF, i, n, dim, NSIZE,totnpt, stat, j, k
  REAL(KIND=dp) :: nu, E,E2, LambdaLame, MuLame,hslope,yield
 real(kind=dp), allocatable, save :: kstress(:,:)
 real(kind=dp), allocatable, save :: elstrain(:,:)
@@ -147,7 +146,7 @@ real(kind=dp),allocatable, save:: cumwork(:,:)
  real (kind=dp)::pstress(ntens),pstran(ntens)
  real(kind=dp),allocatable,save :: Trise(:)
  real(kind=dp),allocatable,save :: cumT(:)
- INTEGER::kstp=0
+ INTEGER::kstp=0,totel,eout
   CHARACTER(LEN=1) :: c=',',header
   TYPE(ValueList_t), POINTER :: Material, SolverParams
   TYPE(Element_t), POINTER :: Element
@@ -170,6 +169,8 @@ close(91)
 visit = 1
 stat = 0
 stime = 0
+totel = 0
+totnpt = 0
     allocate(kstress(10000,ntens))
     allocate(plstrain(10000,ntens))
     allocate(elstrain(10000,ntens))
@@ -184,7 +185,7 @@ stime = 0
 
 end if
 !++++++++++++++++++++++++++++++++++++
-! Cp is specific heat
+
     E = Props(1)
     nu = Props(2)
     hslope = Props(3)
@@ -192,21 +193,24 @@ end if
     density = Props(5)
     Cp = Props(6)
     beta = Props(7)
-    Totnpt = Props(8)
-    Totsteps = Props(9). 
-
-! Check for converged iteration
+!    Totnpt = Props(8)
+    eout = Props(8)
 
 ctime =time(1) - stime
 stime = time(1)
+if (ctime .eq. 0.0) then
+ if (noel.gt.totel) totel=totel+1
+if (npt.gt.totnpt) totnpt=totnpt+1
+end if
+
 if (ctime .gt. 0.0) then
 stat = 1
 kstp = kstp + 1
 end if
-! store starting E for later use
+
 E2 = E
 
-! Check stress for yield at each tensor
+! Check stress for yield
 
 do i=1,ntens
 
@@ -216,7 +220,6 @@ do i=1,ntens
     end if
 end do
 
-! Calculate stresses
 
     LambdaLame = E * nu / ( (1.0d0+nu) * (1.0d0-2.0d0*nu) )
     MuLame = E / (2.0d0 * (1.0d0 + nu))
@@ -229,19 +232,17 @@ end do
     DO i=1,ndi
       ddsdde(i,i) = ddsdde(i,i) + MuLame
     END DO
-    ! store previous iteration values
+    !
     pstress = stress
     pstran = stran
     stress = stress + MATMUL(ddsdde,dstran)
    kstress(kstep,:) = stress
-
-! IF a converged step calculate PDE and heat save results
-
 if (stat.eq.1) then
 
    htot(kstp) = 0.0
    do i =1,ntens 
    elstrain(kstp,i) = pstress(i)/E2
+if (elstrain(kstp,i).gt.pstran(i)) elstrain(kstp,i) = pstran(i)
    plstrain(kstp,i) = pstran(i)-elstrain(kstp,i)
     if (plstrain(kstp,i).lt.0.0) plstrain(kstp,i)=0.0
     dlstrain(kstp,i) = plstrain(kstp,i)-plstrain(kstp-1,i)
@@ -251,7 +252,6 @@ if (stat.eq.1) then
   heatinc(kstp,i) = pwi(kstp,i) * 1000000.0 * beta
   end do
 
-!  Assume total heat increase at on node is the sum of all six tensors
    do i =1,ntens 
       htot(kstp) = htot(kstp) + heatinc(kstp,i)
    end do
@@ -260,8 +260,7 @@ if (stat.eq.1) then
     Trise(kstp) = htot(kstp)/(density*Cp)
     cumT(kstp) = cumT(kstp-1) + Trise(kstp)
 
-! Add tensor output to csv file
-
+if (noel.eq.eout) then
    do i=1,ntens
    open(unit=91,file='PDEOutput.csv',status='unknown',position='append')
     write(91,fmt=100) time(1),c,noel,c,npt,c,i,c,pstress(i),c,pstran(i),c&
@@ -269,8 +268,9 @@ if (stat.eq.1) then
 ,htot(kstp),c,cumheat(kstp),c,Trise(kstp),c,cumT(kstp)
    close(91)
    end do
+end if
 100 FORMAT (F8.6,A1,3(i8,A1),10(E13.5,A1),E13.5)
-  if ((noel .eq.2).and.(npt.eq.8)) then 
+  if ((noel .eq.totel).and.(npt.eq.totnpt)) then 
     stat=0
     ctime = 0.0
   end if
